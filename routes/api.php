@@ -27,9 +27,11 @@ use Illuminate\Support\Facades\Route;
 // RUTAS PÚBLICAS
 // ==========================================
 
-// Auth público
+// Auth público (compatibilidad con Android que llama a auth/register, auth/login)
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
+Route::post('auth/login', [AuthController::class, 'login']);
+Route::post('auth/register', [AuthController::class, 'register']);
 
 // Recuperación de Contraseña
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
@@ -59,12 +61,20 @@ Route::get('matches/{id}', [MatchController::class, 'show']);
 
 Route::middleware('auth:sanctum')->group(function () {
 
-    // ========== AUTENTICACIÓN ==========
+    // ========== AUTENTICACIÓN (compatibilidad Android) ==========
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('auth/logout', [AuthController::class, 'logout']);
+    Route::get('auth/profile', [AuthController::class, 'profile']);
+    Route::put('auth/profile', [AuthController::class, 'updateProfile']);
+    Route::get('auth/user-profile', [UserProfileController::class, 'show']);
 
     // ========== PERFIL DE USUARIO ==========
     Route::get('profile', [UserProfileController::class, 'show']);
     Route::put('profile', [UserProfileController::class, 'update']);
+
+    // ========== FOTO DE PERFIL (ImgBB) ==========
+    Route::post('profile/upload-photo', [UserProfileController::class, 'uploadPhoto']);
+    Route::delete('profile/photo', [UserProfileController::class, 'deletePhoto']);
 
     // ========== CANCHAS FAVORITAS ==========
     Route::get('profile/favorite-courts', [UserProfileController::class, 'getFavoriteCourts']);

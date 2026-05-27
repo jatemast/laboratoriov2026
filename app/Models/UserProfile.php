@@ -13,7 +13,7 @@ class UserProfile extends Model
     protected $fillable = [
         'user_id',
         'phone',
-        'avatar',
+        'avatar_url',
         'bio',
         'gender',
         'birth_date',

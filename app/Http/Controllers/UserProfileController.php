@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Models\Court;
+use App\Services\ImgbbService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -189,6 +190,63 @@ class UserProfileController extends Controller
         return response()->json([
             "success" => true,
             "data" => CourtResource::collection($favoriteCourts),
+        ]);
+    }
+    /**
+     * Subir foto de perfil a ImgBB.
+     */
+    public function uploadPhoto(Request $request, ImgbbService $imgbbService): JsonResponse
+    {
+        $request->validate([
+            'photo' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
+        ]);
+
+        $user = User::findOrFail(auth()->id());
+
+        $file = $request->file('photo');
+        $imagePath = $file->getPathname();
+
+        $result = $imgbbService->upload($imagePath, 'avatar_' . $user->id . '_' . time());
+
+        if (!$result || !isset($result['url'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al subir la imagen a ImgBB. Intente nuevamente.',
+            ], 500);
+        }
+
+        // Guardar la URL en el perfil del usuario
+        $user->profile()->updateOrCreate(
+            ['user_id' => $user->id],
+            ['avatar_url' => $result['url']]
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Foto de perfil actualizada exitosamente.',
+            'data' => [
+                'avatar_url' => $result['url'],
+                'thumb_url' => $result['thumb_url'] ?? null,
+                'medium_url' => $result['medium_url'] ?? null,
+            ],
+        ]);
+    }
+
+    /**
+     * Eliminar foto de perfil.
+     */
+    public function deletePhoto(): JsonResponse
+    {
+        $user = User::findOrFail(auth()->id());
+
+        $user->profile()->updateOrCreate(
+            ['user_id' => $user->id],
+            ['avatar_url' => null]
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Foto de perfil eliminada exitosamente.',
         ]);
     }
 }

@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'imgbb' => [
+        'key' => env('IMGBB_API_KEY', 'd7f910676a11818a1906b1153a576736'),
+    ],
+
 ];

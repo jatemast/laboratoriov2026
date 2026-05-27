@@ -11,7 +11,8 @@ class UserProfileResource extends JsonResource
         return [
             'id' => $this->id,
             'phone' => $this->phone,
-            'avatar' => $this->avatar,
+            'avatar' => $this->avatar_url, // Mapear avatar_url como 'avatar' para compatibilidad
+            'avatar_url' => $this->avatar_url,
             'bio' => $this->bio,
             'gender' => $this->gender,
             'birth_date' => $this->birth_date,
