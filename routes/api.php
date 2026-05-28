@@ -4,10 +4,15 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ClubController;
 use App\Http\Controllers\CourtController;
+use App\Http\Controllers\FeedController;
+use App\Http\Controllers\GeoLocationController;
 use App\Http\Controllers\MatchController;
+use App\Http\Controllers\MessageController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\PlayerController;
 use App\Http\Controllers\ReviewController;
+use App\Http\Controllers\TournamentController;
 use App\Http\Controllers\UserProfileController;
 use App\Http\Controllers\ClubAdminController;
 use Illuminate\Support\Facades\Route;
@@ -55,6 +60,22 @@ Route::get('reviews', [ReviewController::class, 'index']);
 Route::get('matches', [MatchController::class, 'index']);
 Route::get('matches/{id}', [MatchController::class, 'show']);
 
+// ========== GEOLOCALIZACIÓN PÚBLICA ==========
+Route::get('geo/clubs/nearby', [GeoLocationController::class, 'nearbyClubs']);
+Route::get('geo/distance', [GeoLocationController::class, 'calculateDistance']);
+
+// ========== JUGADORES PÚBLICOS ==========
+Route::get('players', [PlayerController::class, 'search']);
+Route::get('players/{id}', [PlayerController::class, 'show']);
+Route::get('players/{id}/stats', [PlayerController::class, 'stats']);
+
+// ========== TORNEOS PÚBLICOS ==========
+Route::get('tournaments', [TournamentController::class, 'index']);
+Route::get('tournaments/{id}', [TournamentController::class, 'show']);
+
+// ========== FEED PÚBLICO ==========
+Route::get('feed/global', [FeedController::class, 'globalFeed']);
+
 // ==========================================
 // RUTAS PROTEGIDAS (Requieren autenticación Sanctum)
 // ==========================================
@@ -71,6 +92,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // ========== PERFIL DE USUARIO ==========
     Route::get('profile', [UserProfileController::class, 'show']);
     Route::put('profile', [UserProfileController::class, 'update']);
+
+    // ========== ESTADÍSTICAS DE PERFIL ==========
+    Route::get('profile/stats', [PlayerController::class, 'stats']);
 
     // ========== FOTO DE PERFIL (ImgBB) ==========
     Route::post('profile/upload-photo', [UserProfileController::class, 'uploadPhoto']);
@@ -131,4 +155,29 @@ Route::middleware('auth:sanctum')->group(function () {
     // ========== PANEL DE ADMINISTRACIÓN DEL CLUB ==========
     Route::get('admin/clubs/{clubId}/summary', [ClubAdminController::class, 'getDashboardSummary']);
     Route::get('admin/clubs/{clubId}/upcoming-bookings', [ClubAdminController::class, 'getUpcomingBookings']);
+
+    // ========== MENSAJERÍA / CHAT ==========
+    Route::get('messages/conversations', [MessageController::class, 'conversations']);
+    Route::get('messages/conversation/{userId}', [MessageController::class, 'conversation']);
+    Route::get('messages/match/{matchId}', [MessageController::class, 'matchMessages']);
+    Route::post('messages/send', [MessageController::class, 'send']);
+    Route::post('messages/{id}/read', [MessageController::class, 'markAsRead']);
+    Route::post('messages/conversation/{userId}/read', [MessageController::class, 'markConversationAsRead']);
+    Route::get('messages/unread-count', [MessageController::class, 'unreadCount']);
+    Route::delete('messages/{id}', [MessageController::class, 'destroy']);
+
+    // ========== GEOLOCALIZACIÓN (Jugadores cercanos - requiere auth) ==========
+    Route::get('geo/players/nearby', [GeoLocationController::class, 'nearbyPlayers']);
+
+    // ========== TORNEOS (Protegidas) ==========
+    Route::post('tournaments', [TournamentController::class, 'store']);
+    Route::post('tournaments/{tournamentId}/register', [TournamentController::class, 'register']);
+    Route::post('tournaments/{tournamentId}/approve/{playerId}', [TournamentController::class, 'approvePlayer']);
+    Route::post('tournaments/{tournamentId}/reject/{playerId}', [TournamentController::class, 'rejectPlayer']);
+    Route::post('tournaments/{tournamentId}/start', [TournamentController::class, 'start']);
+    Route::put('tournament-matches/{matchId}/result', [TournamentController::class, 'updateMatchResult']);
+    Route::delete('tournaments/{id}', [TournamentController::class, 'destroy']);
+
+    // ========== FEED DE ACTIVIDAD ==========
+    Route::get('feed/my', [FeedController::class, 'myFeed']);
 });
