@@ -171,6 +171,86 @@ class AuthController extends Controller
     }
 
     #[OA\Post(
+        path: '/api/auth/google',
+        summary: 'Iniciar sesión con Google',
+        description: 'Autentica un usuario usando el ID token de Google y devuelve un token de acceso.',
+        operationId: 'googleLogin',
+        tags: ['Autenticación'],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['id_token'],
+                properties: [
+                    new OA\Property(property: 'id_token', type: 'string', description: 'Google ID Token obtenido en la app móvil'),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'Inicio de sesión exitoso'),
+            new OA\Response(response: 401, description: 'Token inválido')
+        ]
+    )]
+    public function googleLogin(Request $request): JsonResponse
+    {
+        $request->validate([
+            'id_token' => 'required|string',
+        ]);
+
+        $idToken = $request->input('id_token');
+
+        // Verificamos el token enviándolo directamente al endpoint de validación de Google
+        $response = \Illuminate\Support\Facades\Http::get('https://oauth2.googleapis.com/tokeninfo', [
+            'id_token' => $idToken,
+        ]);
+
+        if ($response->failed()) {
+            return response()->json([
+                'message' => 'Token de Google inválido',
+            ], 401);
+        }
+
+        $googleUser = $response->json();
+
+        if (!isset($googleUser['email']) || !isset($googleUser['sub'])) {
+            return response()->json([
+                'message' => 'El token no contiene información válida (email/sub)',
+            ], 401);
+        }
+
+        // Buscar al usuario por google_id o por email
+        $user = User::where('google_id', $googleUser['sub'])
+                    ->orWhere('email', $googleUser['email'])
+                    ->first();
+
+        if (!$user) {
+            // Crear el usuario si no existe
+            $user = User::create([
+                'name' => $googleUser['name'] ?? 'Usuario',
+                'email' => $googleUser['email'],
+                'google_id' => $googleUser['sub'],
+                'password' => null, // No requiere contraseña si usa Google
+            ]);
+        } else if (!$user->google_id) {
+            // Vincular la cuenta existente con el ID de Google
+            $user->update(['google_id' => $googleUser['sub']]);
+        }
+
+        $user->tokens()->delete();
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'message' => 'Inicio de sesión exitoso con Google',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+            ],
+            'token' => $token,
+        ], 200);
+    }
+
+    #[OA\Post(
         path: '/api/auth/logout',
         summary: 'Cerrar sesión',
         description: 'Revoca el token de acceso del usuario autenticado.',

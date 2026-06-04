@@ -37,6 +37,7 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('auth/login', [AuthController::class, 'login']);
 Route::post('auth/register', [AuthController::class, 'register']);
+Route::post('auth/google', [AuthController::class, 'googleLogin']);
 
 // Recuperación de Contraseña
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
