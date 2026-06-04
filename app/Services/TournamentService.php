@@ -105,7 +105,7 @@ class TournamentService
         return $tournament->players()->create([
             'user_id' => $userId,
             'team_name' => $teamName,
-            'status' => 'pending',
+            'status' => 'approved', // Auto-aprobar para facilitar pruebas y uso directo
         ]);
     }
 
@@ -130,6 +130,9 @@ class TournamentService
         if ($tournament->status !== 'registration') {
             throw new \Exception('El torneo no está en período de inscripción.');
         }
+
+        // Auto-aprobar todos los jugadores pendientes para agilizar el proceso
+        $tournament->players()->where('status', 'pending')->update(['status' => 'approved']);
 
         $approvedPlayers = $tournament->players()->where('status', 'approved')->get();
         if ($approvedPlayers->count() < 2) {
