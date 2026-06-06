@@ -97,6 +97,11 @@ class TournamentService
             throw new \Exception('El torneo no está en período de inscripción.');
         }
 
+        $alreadyRegistered = $tournament->players()->where('user_id', $userId)->exists();
+        if ($alreadyRegistered) {
+            throw new \Exception('Ya estás inscrito en este torneo.');
+        }
+
         $playerCount = $tournament->players()->where('status', 'approved')->count();
         if ($playerCount >= $tournament->max_teams) {
             throw new \Exception('El torneo ha alcanzado el máximo de participantes.');
