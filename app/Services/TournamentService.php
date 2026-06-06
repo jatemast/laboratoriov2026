@@ -14,7 +14,7 @@ class TournamentService
      */
     public function list(array $filters = [])
     {
-        $query = Tournament::with(['club', 'creator.profile']);
+        $query = Tournament::with(['club', 'creator.profile'])->withCount('players');
 
         if (!empty($filters['club_id'])) {
             $query->byClub($filters['club_id']);

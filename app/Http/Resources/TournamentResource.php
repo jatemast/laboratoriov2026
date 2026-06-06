@@ -27,7 +27,7 @@ class TournamentResource extends JsonResource
             'entry_fee' => (float) $this->entry_fee,
             'prize' => $this->prize,
             'status' => $this->status,
-            'players_count' => $this->when($this->players_count, $this->players_count),
+            'players_count' => $this->players_count ?? ($this->relationLoaded('players') ? $this->players->count() : 0),
             'club' => new ClubResource($this->whenLoaded('club')),
             'creator' => new UserResource($this->whenLoaded('creator')),
             'players' => TournamentPlayerResource::collection($this->whenLoaded('players')),
