@@ -83,7 +83,7 @@ class TournamentService
             'tournamentMatches.team2Player1.profile',
             'tournamentMatches.team2Player2.profile',
             'tournamentMatches.winner.profile',
-        ])->findOrFail($id);
+        ])->withCount('players')->findOrFail($id);
     }
 
     /**
@@ -126,7 +126,7 @@ class TournamentService
     }
 
     /**
-     * Iniciar torneo (generar bracket).
+     * Iniciar torneo (generar bracket completo).
      */
     public function startTournament(int $tournamentId): Tournament
     {
@@ -147,43 +147,80 @@ class TournamentService
         // Generar bracket de eliminación simple
         $players = $approvedPlayers->shuffle();
         $numPlayers = $players->count();
-        $rounds = ceil(log($numPlayers, 2));
-        $totalSlots = pow(2, $rounds);
+        $totalRounds = (int) ceil(log($numPlayers, 2));
+        $totalSlots = (int) pow(2, $totalRounds);
 
-        // Crear partidos de primera ronda
-        $position = 1;
-        for ($i = 0; $i < $numPlayers; $i += 2) {
-            $p1 = $players[$i] ?? null;
-            $p2 = $players[$i + 1] ?? null;
+        // === RONDA 1: Crear partidos con los jugadores asignados ===
+        $round1Matches = $totalSlots / 2; // Número de partidos en ronda 1
+        for ($pos = 1; $pos <= $round1Matches; $pos++) {
+            $idx1 = ($pos - 1) * 2;
+            $idx2 = $idx1 + 1;
 
-            TournamentMatch::create([
+            $p1 = $players[$idx1] ?? null;
+            $p2 = $players[$idx2] ?? null;
+
+            $match = TournamentMatch::create([
                 'tournament_id' => $tournamentId,
                 'round' => 1,
-                'position' => $position,
+                'position' => $pos,
                 'team1_player1_id' => $p1?->user_id,
                 'team2_player1_id' => $p2?->user_id,
-                'status' => 'pending',
+                'status' => ($p1 && $p2) ? 'pending' : 'bye',
             ]);
-            $position++;
+
+            // Si es un bye (solo un jugador), avanzar automáticamente
+            if ($p1 && !$p2) {
+                $match->update([
+                    'winner_id' => $p1->user_id,
+                    'status' => 'completed',
+                ]);
+            }
         }
 
-        // Si hay byes (número impar de equipos)
-        if ($numPlayers < $totalSlots) {
-            $byes = $totalSlots - $numPlayers;
-            for ($i = 0; $i < $byes; $i++) {
+        // === RONDAS 2 en adelante: Crear partidos vacíos (slots) ===
+        for ($round = 2; $round <= $totalRounds; $round++) {
+            $matchesInRound = (int) pow(2, $totalRounds - $round);
+            for ($pos = 1; $pos <= $matchesInRound; $pos++) {
                 TournamentMatch::create([
                     'tournament_id' => $tournamentId,
-                    'round' => 1,
-                    'position' => $position,
-                    'status' => 'bye',
+                    'round' => $round,
+                    'position' => $pos,
+                    'status' => 'pending',
                 ]);
-                $position++;
+            }
+        }
+
+        // === Avanzar los ganadores de byes a la ronda 2 ===
+        $byeMatches = TournamentMatch::where('tournament_id', $tournamentId)
+            ->where('round', 1)
+            ->where('status', 'completed')
+            ->whereNotNull('winner_id')
+            ->get();
+
+        foreach ($byeMatches as $byeMatch) {
+            $nextPosition = (int) ceil($byeMatch->position / 2);
+            $nextMatch = TournamentMatch::where('tournament_id', $tournamentId)
+                ->where('round', 2)
+                ->where('position', $nextPosition)
+                ->first();
+
+            if ($nextMatch) {
+                if ($byeMatch->position % 2 === 1) {
+                    $nextMatch->update(['team1_player1_id' => $byeMatch->winner_id]);
+                } else {
+                    $nextMatch->update(['team2_player1_id' => $byeMatch->winner_id]);
+                }
             }
         }
 
         $tournament->update(['status' => 'in_progress']);
 
-        return $tournament->fresh()->load(['tournamentMatches', 'players']);
+        return $tournament->fresh()->load([
+            'tournamentMatches.team1Player1.profile',
+            'tournamentMatches.team2Player1.profile',
+            'tournamentMatches.winner.profile',
+            'players.user.profile',
+        ])->loadCount('players');
     }
 
     /**
@@ -202,12 +239,29 @@ class TournamentService
 
             // Avanzar ganador a siguiente ronda
             $nextRound = $tournamentMatch->round + 1;
-            $nextPosition = ceil($tournamentMatch->position / 2);
+            $nextPosition = (int) ceil($tournamentMatch->position / 2);
 
             $nextMatch = TournamentMatch::where('tournament_id', $tournamentMatch->tournament_id)
                 ->where('round', $nextRound)
                 ->where('position', $nextPosition)
                 ->first();
+
+            // Si no existe el partido de la siguiente ronda, crearlo (fallback de seguridad)
+            if (!$nextMatch) {
+                // Verificar si debería haber más rondas
+                $totalMatchesThisRound = TournamentMatch::where('tournament_id', $tournamentMatch->tournament_id)
+                    ->where('round', $tournamentMatch->round)
+                    ->count();
+
+                if ($totalMatchesThisRound > 1) {
+                    $nextMatch = TournamentMatch::create([
+                        'tournament_id' => $tournamentMatch->tournament_id,
+                        'round' => $nextRound,
+                        'position' => $nextPosition,
+                        'status' => 'pending',
+                    ]);
+                }
+            }
 
             if ($nextMatch) {
                 if ($tournamentMatch->position % 2 === 1) {
@@ -217,18 +271,24 @@ class TournamentService
                 }
             }
 
-            // Verificar si el torneo terminó
-            $remainingMatches = TournamentMatch::where('tournament_id', $tournamentMatch->tournament_id)
+            // Verificar si el torneo terminó (no quedan partidos pending en ninguna ronda)
+            $pendingMatches = TournamentMatch::where('tournament_id', $tournamentMatch->tournament_id)
                 ->where('status', 'pending')
-                ->where('round', $nextRound)
+                ->whereNotNull('team1_player1_id')
+                ->whereNotNull('team2_player1_id')
                 ->count();
 
-            if ($remainingMatches === 0 && !$nextMatch) {
+            $totalPending = TournamentMatch::where('tournament_id', $tournamentMatch->tournament_id)
+                ->where('status', 'pending')
+                ->count();
+
+            // El torneo termina si no hay partido siguiente (fue la final)
+            if (!$nextMatch && $totalPending === 0) {
                 Tournament::where('id', $tournamentMatch->tournament_id)
                     ->update(['status' => 'completed']);
             }
 
-            return $tournamentMatch->fresh();
+            return $tournamentMatch->fresh()->load(['team1Player1', 'team2Player1', 'winner']);
         });
     }
 
@@ -241,3 +301,4 @@ class TournamentService
         return $tournament->delete();
     }
 }
+
